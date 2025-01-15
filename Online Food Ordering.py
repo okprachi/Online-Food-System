@@ -17,17 +17,6 @@ def create_database_and_tables():
     with conn:
         cursor = conn.cursor()
         
-       
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS customers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                phone_number TEXT,
-                email TEXT
-            )
-        ''')
-        
-        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS food_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,7 +24,6 @@ def create_database_and_tables():
                 price REAL NOT NULL CHECK(price > 0)
             )
         ''')
-        
         
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS orders (
@@ -53,6 +41,25 @@ def create_database_and_tables():
     
     print("Database and tables created successfully.")
 
+def recreate_customers_table():
+    conn = get_db_connection()
+    if conn is None:
+        return
+    
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute('DROP TABLE IF EXISTS customers')  # Drop the old table
+        cursor.execute('''
+            CREATE TABLE customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone_number TEXT,
+                email TEXT
+            )
+        ''')
+    
+    print("Customers table recreated successfully.")
+
 def execute_query(query, params=()):
     """Executes a query with parameters and returns the cursor."""
     conn = get_db_connection()
@@ -63,14 +70,14 @@ def execute_query(query, params=()):
     cursor.execute(query, params)
     return cursor, conn
 
-def add_customer(username, phone_number, email):
+def add_customer(name, phone_number, email):
     """Adds a new customer to the database."""
-    query = 'INSERT INTO customers (username, phone_number, email) VALUES (?, ?, ?)'
-    cursor, conn = execute_query(query, (username, phone_number, email))
+    query = 'INSERT INTO customers (name, phone_number, email) VALUES (?, ?, ?)'
+    cursor, conn = execute_query(query, (name, phone_number, email))
     
     if cursor:
         conn.commit()
-        print(f'Added customer: {username}')
+        print(f'Added customer: {name}')
         cursor.close()
         conn.close()
 
@@ -81,7 +88,7 @@ def view_customers():
     if cursor:
         print("\nCustomer List:")
         for customer in cursor.fetchall():
-            print(f'ID: {customer[0]}, Username: {customer[1]}, Phone: {customer[2]}, Email: {customer[3]}')
+            print(f'ID: {customer[0]}, Name: {customer[1]}, Phone: {customer[2]}, Email: {customer[3]}')
         
         cursor.close()
         conn.close()
@@ -122,7 +129,6 @@ def place_order(customer_id, food_item_id, quantity):
          print("Invalid payment method. Please choose cash, card, or UPI.")
          return
     
-    
     query = 'SELECT price FROM food_items WHERE id = ?'
     cursor, conn = execute_query(query, (food_item_id,))
     
@@ -132,7 +138,6 @@ def place_order(customer_id, food_item_id, quantity):
          if result:
              price = result[0]
              total_price = price * quantity
-             
              
              insert_order_query = '''
                  INSERT INTO orders (customer_id, food_item_id, quantity, total_price, payment_method)
@@ -144,11 +149,9 @@ def place_order(customer_id, food_item_id, quantity):
              order_id = cursor.lastrowid  
              print(f'Order placed! Total price: ${total_price:.2f}')
              
-             
              print_receipt(order_id)
              
-             
-             view_orders()  
+             view_orders()
          else:
              print("Invalid food item ID.")
              
@@ -159,7 +162,7 @@ def print_receipt(order_id):
      """Prints a receipt for the order."""
      
      query = '''
-         SELECT o.id AS order_id, c.username AS customer_name, f.name AS food_item_name,
+         SELECT o.id AS order_id, c.name AS customer_name, f.name AS food_item_name,
                 o.quantity, o.total_price, o.order_time 
          FROM orders o 
          JOIN customers c ON o.customer_id = c.id 
@@ -187,7 +190,7 @@ def print_receipt(order_id):
 def view_orders():
      
      query = '''
-         SELECT o.id AS order_id, c.username AS customer_name, f.name AS food_item_name,
+         SELECT o.id AS order_id, c.name AS customer_name, f.name AS food_item_name,
                 o.quantity, o.total_price, o.order_time 
          FROM orders o 
          JOIN customers c ON o.customer_id = c.id 
@@ -207,65 +210,66 @@ def view_orders():
           conn.close()
 
 def main():
-     create_database_and_tables()   
+    create_database_and_tables()   
+    recreate_customers_table()  # Ensure the customers table is updated
     
-     while True:
-         print("\nOnline Food Ordering System")
-         options = {
-             '1': "Add Customer",
-             '2': "View Customers",
-             '3': "Add Food Item",
-             '4': "View Food Items",
-             '5': "Place Order",
-             '6': "View Orders",
-             '7': "Exit"
-         }
-         
-         for key in options:
-             print(f"{key}. {options[key]}")
+    while True:
+        print("\nOnline Food Ordering System")
+        options = {
+            '1': "Add Customer",
+            '2': "View Customers",
+            '3': "Add Food Item",
+            '4': "View Food Items",
+            '5': "Place Order",
+            '6': "View Orders",
+            '7': "Exit"
+        }
+        
+        for key in options:
+            print(f"{key}. {options[key]}")
 
-         choice = input("Choose an option: ")
+        choice = input("Choose an option: ")
 
-         if choice == '1':
-             username = input("Enter username: ")
-             phone_number = input("Enter phone number: ")
-             email = input("Enter email address: ")
-             add_customer(username.strip(), phone_number.strip(), email.strip())
+        if choice == '1':
+            name = input("Enter name: ")
+            phone_number = input("Enter phone number: ")
+            email = input("Enter email address: ")
+            add_customer(name.strip(), phone_number.strip(), email.strip())
 
-         elif choice == '2':
-             view_customers()
+        elif choice == '2':
+            view_customers()
 
-         elif choice == '3':
-             name = input("Enter food item name: ")
-             try:
-                 price = float(input("Enter food item price: "))
-                 add_food_item(name.strip(), price)
-             except ValueError:
-                 print("Invalid price entered. Please enter a numeric value.")
+        elif choice == '3':
+            name = input("Enter food item name: ")
+            try:
+                price = float(input("Enter food item price: "))
+                add_food_item(name.strip(), price)
+            except ValueError:
+                print("Invalid price entered. Please enter a numeric value.")
 
-         elif choice == '4':
-             view_food_items()
+        elif choice == '4':
+            view_food_items()
 
-         elif choice == '5':
-             view_customers()  
-             try:
-                 customer_id = int(input("Enter customer ID to place an order for: "))
-                 view_food_items()  
-                 food_item_id = int(input("Enter food item ID to order: "))
-                 quantity = int(input("Enter quantity: "))
-                 place_order(customer_id, food_item_id, quantity)
-             except ValueError:
-                 print("Invalid input. Please enter numeric values for ID and quantity.")
+        elif choice == '5':
+            view_customers()  
+            try:
+                customer_id = int(input("Enter customer ID to place an order for: "))
+                view_food_items()  
+                food_item_id = int(input("Enter food item ID to order: "))
+                quantity = int(input("Enter quantity: "))
+                place_order(customer_id, food_item_id, quantity)
+            except ValueError:
+                print("Invalid input. Please enter numeric values for ID and quantity.")
 
-         elif choice == '6':
-             view_orders()
+        elif choice == '6':
+            view_orders()
 
-         elif choice == '7':
-             print("Exiting the program.")
-             break
+        elif choice == '7':
+            print("Exiting the program.")
+            break
 
-         else:
-             print("Invalid choice. Please try again.")
+        else:
+            print("Invalid choice. Please try again.")
 
 if __name__ == '__main__':
-     main()
+    main()
