@@ -1,151 +1,111 @@
-import mysql.connector
-from mysql.connector import Error
+import sqlite3
+from sqlite3 import Error
 from datetime import datetime
 
 def get_db_connection():
-    """Establishes a connection to the MySQL database."""
     try:
-        return mysql.connector.connect(
-            host='localhost',
-            user='root',  # replace with your MySQL username
-            password='YES',  # replace with your MySQL password
-            database='food_ordering'
-        )
+        return sqlite3.connect('food_ordering.db')
     except Error as e:
-        print(f"Error connecting to MySQL: {e}")
+        print(f"Error connecting to SQLite: {e}")
         return None
 
 def create_database_and_tables():
-    """Creates the database and necessary tables if they do not exist."""
-    try:
-        conn = mysql.connector.connect(
-            host='localhost',
-            user='root',  # replace with your MySQL username
-            password='YES'  # replace with your MySQL password
-        )
-        
-        cursor = conn.cursor()
-        
-        # Create database if it doesn't exist
-        cursor.execute("CREATE DATABASE IF NOT EXISTS food_ordering")
-        
-        # Use the newly created database
-        cursor.execute("USE food_ordering")
-        
-        # Create customers table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS customers (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(255) NOT NULL,
-                phone_number VARCHAR(20),
-                email VARCHAR(255)
-            )
-        ''')
-        
-        # Create food_items table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS food_items (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                price DECIMAL(10, 2) NOT NULL
-            )
-        ''')
-        
-        # Create orders table with payment_method column
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS orders (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                customer_id INT,
-                food_item_id INT,
-                quantity INT,
-                total_price DECIMAL(10, 2),
-                order_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-                payment_method VARCHAR(20),
-                FOREIGN KEY (customer_id) REFERENCES customers(id),
-                FOREIGN KEY (food_item_id) REFERENCES food_items(id)
-            )
-        ''')
-        
-        print("Database and tables created successfully.")
-        
-    except Error as e:
-        print(f"Error creating database or tables: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-
-def add_customer(username, phone_number, email):
-    """Adds a new customer to the database."""
     conn = get_db_connection()
     if conn is None:
         return
     
+    with conn:
+        cursor = conn.cursor()
+        
+       
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                phone_number TEXT,
+                email TEXT
+            )
+        ''')
+        
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS food_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                price REAL NOT NULL CHECK(price > 0)
+            )
+        ''')
+        
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER,
+                food_item_id INTEGER,
+                quantity INTEGER CHECK(quantity > 0),
+                total_price REAL,
+                order_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                payment_method TEXT CHECK(payment_method IN ('cash', 'card', 'upi')),
+                FOREIGN KEY (customer_id) REFERENCES customers(id),
+                FOREIGN KEY (food_item_id) REFERENCES food_items(id)
+            )
+        ''')
+    
+    print("Database and tables created successfully.")
+
+def execute_query(query, params=()):
+    """Executes a query with parameters and returns the cursor."""
+    conn = get_db_connection()
+    if conn is None:
+        return None
+    
     cursor = conn.cursor()
-    try:
-        cursor.execute('INSERT INTO customers (username, phone_number, email) VALUES (%s, %s, %s)', 
-                       (username, phone_number, email))
+    cursor.execute(query, params)
+    return cursor, conn
+
+def add_customer(username, phone_number, email):
+    """Adds a new customer to the database."""
+    query = 'INSERT INTO customers (username, phone_number, email) VALUES (?, ?, ?)'
+    cursor, conn = execute_query(query, (username, phone_number, email))
+    
+    if cursor:
         conn.commit()
         print(f'Added customer: {username}')
-    except Error as e:
-        print(f"Error adding customer: {e}")
-    finally:
         cursor.close()
         conn.close()
 
 def view_customers():
     """Displays all customers in the database."""
-    conn = get_db_connection()
-    if conn is None:
-        return
+    cursor, conn = execute_query('SELECT * FROM customers')
     
-    cursor = conn.cursor()
-    try:
-        cursor.execute('SELECT * FROM customers')
-        customers = cursor.fetchall()
-
+    if cursor:
         print("\nCustomer List:")
-        for customer in customers:
+        for customer in cursor.fetchall():
             print(f'ID: {customer[0]}, Username: {customer[1]}, Phone: {customer[2]}, Email: {customer[3]}')
-    except Error as e:
-        print(f"Error retrieving customers: {e}")
-    finally:
+        
         cursor.close()
         conn.close()
 
 def add_food_item(name, price):
     """Adds a new food item to the database."""
-    conn = get_db_connection()
-    if conn is None:
-        return
+    query = 'INSERT INTO food_items (name, price) VALUES (?, ?)'
+    cursor, conn = execute_query(query, (name, price))
     
-    cursor = conn.cursor()
-    try:
-        cursor.execute('INSERT INTO food_items (name, price) VALUES (%s, %s)', (name, price))
+    if cursor:
         conn.commit()
         print(f'Added food item: {name} at ${price:.2f}')
-    except Error as e:
-        print(f"Error adding food item: {e}")
-    finally:
         cursor.close()
         conn.close()
 
 def view_food_items():
     """Displays all food items in the database."""
-    conn = get_db_connection()
-    if conn is None:
-        return
+    cursor, conn = execute_query('SELECT * FROM food_items')
     
-    cursor = conn.cursor()
-    try:
-        cursor.execute('SELECT * FROM food_items')
-        items = cursor.fetchall()
-
+    if cursor:
         print("\nFood Menu:")
-        for item in items:
+        for item in cursor.fetchall():
             print(f'ID: {item[0]}, Name: {item[1]}, Price: ${item[2]:.2f}')
-    except Error as e:
-        print(f"Error retrieving food items: {e}")
-    finally:
+        
         cursor.close()
         conn.close()
 
@@ -162,69 +122,53 @@ def place_order(customer_id, food_item_id, quantity):
          print("Invalid payment method. Please choose cash, card, or UPI.")
          return
     
-    conn = get_db_connection()
     
-    if conn is None:
-         return
+    query = 'SELECT price FROM food_items WHERE id = ?'
+    cursor, conn = execute_query(query, (food_item_id,))
     
-    cursor = conn.cursor()
-     
-    try:
-         # Get the price of the food item
-         cursor.execute('SELECT price FROM food_items WHERE id = %s', (food_item_id,))
-         
+    if cursor:
          result = cursor.fetchone()
          
          if result:
              price = result[0]
              total_price = price * quantity
              
-             # Insert the order into the orders table
-             cursor.execute('INSERT INTO orders (customer_id, food_item_id, quantity, total_price, payment_method) VALUES (%s, %s, %s, %s, %s)',
-                            (customer_id, food_item_id, quantity, total_price, payment_method))
              
-             order_id = cursor.lastrowid  # Get the last inserted order ID
-             
+             insert_order_query = '''
+                 INSERT INTO orders (customer_id, food_item_id, quantity, total_price, payment_method)
+                 VALUES (?, ?, ?, ?, ?)
+             '''
+             execute_query(insert_order_query, (customer_id, food_item_id, quantity, total_price, payment_method))
              conn.commit()
+             
+             order_id = cursor.lastrowid  
              print(f'Order placed! Total price: ${total_price:.2f}')
              
-             # Print receipt
+             
              print_receipt(order_id)
              
-             # Optionally view orders after placing one
-             view_orders()  
              
+             view_orders()  
          else:
              print("Invalid food item ID.")
              
-    except Error as e:
-         print(f"Error placing order: {e}")
-         
-    finally:
          cursor.close()
          conn.close()
 
 def print_receipt(order_id):
      """Prints a receipt for the order."""
      
-     conn = get_db_connection()
+     query = '''
+         SELECT o.id AS order_id, c.username AS customer_name, f.name AS food_item_name,
+                o.quantity, o.total_price, o.order_time 
+         FROM orders o 
+         JOIN customers c ON o.customer_id = c.id 
+         JOIN food_items f ON o.food_item_id = f.id 
+         WHERE o.id = ?
+     '''
+     cursor, conn = execute_query(query, (order_id,))
      
-     if conn is None:
-          return
-     
-     cursor = conn.cursor()
-
-     try:
-          # Retrieve order details for receipt
-          cursor.execute('''
-              SELECT o.id AS order_id, c.username AS customer_name, f.name AS food_item_name,
-                     o.quantity, o.total_price, o.order_time 
-              FROM orders o 
-              JOIN customers c ON o.customer_id = c.id 
-              JOIN food_items f ON o.food_item_id = f.id 
-              WHERE o.id = %s
-          ''', (order_id,))
-          
+     if cursor:
           order_details = cursor.fetchone()
 
           if order_details:
@@ -237,33 +181,21 @@ def print_receipt(order_id):
               print(f"Order Time: {order_details[5]}")
               print("----------------")
               
-     except Error as e:
-          print(f"Error retrieving order details for receipt: {e}")
-
-     finally:
           cursor.close()
           conn.close()
 
 def view_orders():
-     """Displays all orders placed by users."""
      
-     conn = get_db_connection()
+     query = '''
+         SELECT o.id AS order_id, c.username AS customer_name, f.name AS food_item_name,
+                o.quantity, o.total_price, o.order_time 
+         FROM orders o 
+         JOIN customers c ON o.customer_id = c.id 
+         JOIN food_items f ON o.food_item_id = f.id
+     '''
+     cursor, conn = execute_query(query)
      
-     if conn is None:
-          return
-     
-     cursor = conn.cursor()
-     
-     try:
-          # Join orders with customers and food items
-          cursor.execute('''
-              SELECT o.id AS order_id, c.username AS customer_name, f.name AS food_item_name,
-                     o.quantity, o.total_price, o.order_time 
-              FROM orders o 
-              JOIN customers c ON o.customer_id = c.id 
-              JOIN food_items f ON o.food_item_id = f.id
-          ''')
-          
+     if cursor:
           orders = cursor.fetchall()
 
           print("\nOrder History:")
@@ -271,26 +203,26 @@ def view_orders():
               print(f'Order ID: {order[0]}, Customer: {order[1]}, Food Item: {order[2]}, '
                     f'Quantity: {order[3]}, Total Price: ${order[4]:.2f}, Order Time: {order[5]}')
               
-     except Error as e:
-          print(f"Error retrieving orders: {e}")
-          
-     finally:
           cursor.close()
           conn.close()
 
 def main():
-    
-     create_database_and_tables()  # Ensure database and tables are created before proceeding
+     create_database_and_tables()   
     
      while True:
          print("\nOnline Food Ordering System")
-         print("1. Add Customer")
-         print("2. View Customers")
-         print("3. Add Food Item")
-         print("4. View Food Items")
-         print("5. Place Order")
-         print("6. View Orders")
-         print("7. Exit")
+         options = {
+             '1': "Add Customer",
+             '2': "View Customers",
+             '3': "Add Food Item",
+             '4': "View Food Items",
+             '5': "Place Order",
+             '6': "View Orders",
+             '7': "Exit"
+         }
+         
+         for key in options:
+             print(f"{key}. {options[key]}")
 
          choice = input("Choose an option: ")
 
@@ -298,7 +230,7 @@ def main():
              username = input("Enter username: ")
              phone_number = input("Enter phone number: ")
              email = input("Enter email address: ")
-             add_customer(username, phone_number, email)
+             add_customer(username.strip(), phone_number.strip(), email.strip())
 
          elif choice == '2':
              view_customers()
@@ -307,7 +239,7 @@ def main():
              name = input("Enter food item name: ")
              try:
                  price = float(input("Enter food item price: "))
-                 add_food_item(name, price)
+                 add_food_item(name.strip(), price)
              except ValueError:
                  print("Invalid price entered. Please enter a numeric value.")
 
@@ -315,10 +247,10 @@ def main():
              view_food_items()
 
          elif choice == '5':
-             view_customers()  # Show customers before placing an order
+             view_customers()  
              try:
                  customer_id = int(input("Enter customer ID to place an order for: "))
-                 view_food_items()  # Show menu before placing an order
+                 view_food_items()  
                  food_item_id = int(input("Enter food item ID to order: "))
                  quantity = int(input("Enter quantity: "))
                  place_order(customer_id, food_item_id, quantity)
