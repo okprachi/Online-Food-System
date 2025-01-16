@@ -1,0 +1,1 @@
+sqlite3:- Download file from official website and extract it in C drive, copy the directory path with sqlite files and make an enviromental variable for sqlite3 to add to global variable.
